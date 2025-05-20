@@ -1,6 +1,10 @@
 # LeSyd - A MQTT wrapper for Sydpower/Fossibot/... portable energy stations
 
-IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. For now, Lesyd requires a WiFi connection that redirects `mqtt.sydpower.com`  to a local server. 
+LeSyd is a python scripts that translate the binary MQTT messages used by the Sydpower/Fossibot energy stations into user-friendly MQTT messages.
+
+LeSyd can also replace the [Fossibot Home Assistant integration](https://github.com/iamslan/fossibot).
+
+IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. For now, Lesyd requires a WiFi connection that redirects `mqtt.sydpower.com` to a local server. 
 
 ## Changelog
 

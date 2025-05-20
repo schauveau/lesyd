@@ -62,18 +62,29 @@ DeviceInfo:
    holding_refresh: int(min=3,max=60,required=False)
    ac_charging_levels: list(include('PowerLevel'),min=1,required=False)
 
+Tls:
+   ca_certs: str(required=False)
+   certfile: str(required=False)
+   keyfile:  str(required=False)
+   keyfile_password:  str(required=False)
+   version:  enum('default','tlsv1.2','tlsv1.1','tlsv1',required=False)
+   ciphers:  str(required=False)
+   insecure: bool(required=False)
+
 MqttInfo:
-   transport: enum('unix','tcp','tcp+tls','websocket','websocket+tls',required=False)
+   transport: enum('unix','tcp','websocket',required=False)
    hostname:  str(required=False)
    port:      int(min=0,max=65535,required=False)
    username:  str(required=False)
    password:  str(required=False)
+   tls:       include('Tls', required=False)
 
 Global:
    lesyd_name:   regex('^[0-9a-zA-Z_]+$',required=False)
    loglevel:     enum('debug','info','warning','error','critical',required=False)     
    ha_discovery: bool(required=False)
    ha_prefix:    str(required=False)
+
 
 """)
 
@@ -1039,25 +1050,29 @@ class LeSyd :
         
         mqtt_config.update( config.get(name,{}) or {} )
         
+        with_tls = 'tls' in mqtt_config
+        
         if mqtt_config['port'] is None:
+            key = mqtt_config['transport']
+            if with_tls:
+                key=key+'+tls'
             mqtt_config['port'] = {
                 'unix'          : 0,
+                'unix+tls'      : 0,
                 'tcp'           : 1883,
                 'tcp+tls'       : 8883,
                 'websocket'     : 8083,
-                'websocket+tls' : 8083,                
-            }.get( mqtt_config['transport'], 1883 ) 
-            
+                'websocket+tls' : 8084,                
+            }.get(key,1883)             
 
-        self.logger.info("%s: tranport='%s' hostname='%s' port=%s username='%s' password=%s",
+        self.logger.info("%s: transport='%s' hostname='%s' port=%s username='%s' password=%s tls=",
                          name,
                          mqtt_config['transport'],
                          mqtt_config['hostname'],
                          mqtt_config['port'],
                          mqtt_config['username'],
                          "******" if mqtt_config['password'] else None,
-                         )
-        
+                         )            
         return mqtt_config
     
 
@@ -1068,15 +1083,44 @@ class LeSyd :
 
         if transport=='tcp':
             pass
-        elif transport=='tcp+tls':
-            self.logger.warning("Transport tcp+tls is untested in LeSyd. It is probably broken")
-            # Probably need a lot more options: Certificates, TLS versions, ...
-            # TODO: find some good examples. 
-            client.tls_set()
         else:
             self.logger.error("Sorry! Transport '%s' is not yet implemented", transport)
             sys.exit(1)
-        
+
+        if 'tls' in config:
+
+            tls = config.get('tls')
+            # but an empty tls can be None so 
+            tls = tls or {}   
+            
+            insecure = tls.get('insecure', False)
+
+            version = tls.get('tls_version')
+            if version   == "default":
+                tls_version = ssl.PROTOCOL_TLSv1_2
+            elif version   == "tlsv1.2":
+                tls_version = ssl.PROTOCOL_TLSv1_2
+            elif version == "tlsv1.1":
+                tls_version = ssl.PROTOCOL_TLSv1_1
+            elif version == "tlsv1":
+                tls_version = ssl.PROTOCOL_TLSv1
+            elif version is None:
+                tls_version = None
+            else:
+                self.logger.warning("Unknown TLS version - ignoring")
+                tls_version = None
+
+            client.tls_set(ca_certs=tls.get('ca_certs',None),
+                           certfile=tls.get('certfile',None),
+                           keyfile=tls.get('keyfile',None),
+                           keyfile_password=tls.get('keyfile_password',None),
+                           tls_version=tls_version,
+                           ciphers=tls.get('ciphers',None),
+                           )
+
+            if insecure:
+                client.tls_insecure_set(True)
+            
         if 'username' in config:
             client.username_pw_set(config['username'], config['password'])
                       

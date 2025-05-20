@@ -35,10 +35,8 @@ This is where the **LeSyd** messages are sent.
   - Specify the type of connection to the MQTT Broker
   - Possible values are 
      - `tcp` this the default 
-     - `tcp+tsl` so tcp with SLL/TLS (untested and probably broken) 
      - `unix` to use a UNIX socket (not yet implemented)
      - `websocket` (not yet implemented)
-     - `websocket+tls` (not yet implemented)
 
 - `hostname`
   - A hostname or IP address
@@ -46,20 +44,24 @@ This is where the **LeSyd** messages are sent.
 
 - `port`
   - A port number between 0 and 65535
-  - The default port is set according to the transport method:
-     - 1883 for `tcp` 
-     - 8883 for `tcp+tsl` 
+  - The default port is set according to `transport` and `tls`:
+     - 1883 for `tcp` without tsl
+     - 8883 for `tcp` with tls
      - 0 for `unix` (i.e. no port needed)
-     - 8083 for `websocket`
-     - 8084 for `websocket+tls`
+     - 8083 for `websocket` 
+     - 8084 for `websocket` with tls
 
 - `username`
   - An optional username.
   - If not specified, an anonymous connection will be attempted. 
 
 - `password` 
-  - An optional password  
-  
+  - An optional password
+
+- `tls`
+  - a subsection that enable TLS encryption when present.
+  - See `tls subsection` below 
+
 ## `mqtt_sydpower` section
 
 The `mqtt_sydpower` section is similar to `mqtt_client` but it specifies how to connect to the MQTT broker that handles the device messages (i.e. the redirected `mqtt.sydpower.com` on port 1883).
@@ -67,6 +69,37 @@ The `mqtt_sydpower` section is similar to `mqtt_client` but it specifies how to 
 That section is optional. When missing, the `mqtt_client` connection will be reused.  
 
 **Warning:** An empty `mqtt_sydpower` section is not considered to be missing. It will use the default settings (i.e. `localhost`, port 1083, ...).
+
+### `tls` subsection 
+
+TLS encryption is enabled when that subsection is found in a `mqtt_client` or `mqtt_sydpower` section.
+
+The entries in that subsection correspond to the argument of the `tls_set` and `tls_insecure` members of `paho.mqtt.client.Client`. See also https://eclipse.dev/paho/files/paho.mqtt.python/html/client.html#paho.mqtt.client.Client 
+
+- `ca_certs`
+   - An optional path to the Certificate Authority certificate files that are to be treated
+   as trusted by this client. If not set, the default certification authority of the system is used.
+
+- `certfile`   
+   - An optional PEM encoded client certificate filename. Used with keyfile for client TLS based authentication
+
+- `keyfile`
+   - An optional PEM encoded client private keys filename. Used with certfile for client TLS based authentication
+
+- `keyfile_password`
+   - An optional password used when `keyfile` and `certfile` are encrypted. 
+   
+- `version`
+   - An optional string that describes a TLS version.
+   - Allowed values are `default`, `tlsv1.2`, `tlsv1.1` and `tlsv1`.   
+
+- `ciphers`
+   - An optinal string describing the encryption ciphers that are allowed for this connection.
+   - If not set the default ciphers are used. 
+
+- `insecure`
+   - When set to True, disable the verification of the server hostname in the server certificate.
+   - The default is False
 
 ## `devices` section
 

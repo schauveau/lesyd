@@ -36,7 +36,8 @@ The MQTT broker on the redirected `mqtt.sydpower.com` must allow anonymous non-e
 
 Remark: the device still need internet access ; probably to obtain MQTT credentials from the Sydpower Cloud. Of course, those credentials will not be needed since the local MQTT broker allows for anonynous connections but unfortunately, the device does not know that.   
 
-It is unfortunate that the device is using the MQTT standard port. People that are already  
+If your MQTT server is already using port 1883 without anonymous access, the you may want to move all your MQTT clients to another ports (see below for an example with Mosquitto). An alternative is to install a second MQTT broker on another machine (see `mqtt_sydpower` in the configuration file of LeSyd). 
+
 
 ### Example using the Mosquitto broker
 

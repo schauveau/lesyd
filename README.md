@@ -2,13 +2,31 @@
 
 IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. For now, Lesyd requires a WiFi connection that redirects `mqtt.sydpower.com`  to a local server.
 
+## Known issues / TODO LIST
+
+- Not tested with AFERIY batteries such as the P210 and P310. That may work or brick your device so, please, contact me if you own one of those.
+- Probably a lot of small bugs everywhere. Do not hesitate to fill but reports
+- transport 'tcp+tls' is not tested and is probably broken. Help wanted. Please use 'tcp' for now.
+- option 'loglevel' is ignored. Logging is currenly using level 'info'
+- options `extension1` and `extension2` are not yet implemented. The StateOfCharge is not reported for extension batteries.
+- Changing the value of number entities (`ac_charging_booking`, `dc_max_charging_current`,`discharge_lower_limit`, ...) is not smooth at all in HomeAssistant: Too much traffic and lag between HA, LeSyd and the device.
+
+## FAQ
+
+### Why LeSyd?
+
+Because of Sydpower, the OEM company that provides the devices.
+
+Also, I am French and this is a reference to (Le Cid)[https://en.wikipedia.org/wiki/Le_Cid], a well known French tragicomedy written by Pierre Corneille in 1636.
+
+
 ## How to redirect the device MQTT traffic?
 
-The goal here is to change the DNS entry for `mqtt.sydpower.com`.
+The goal here is to change the DNS entry for `mqtt.sydpower.com` so that it points to a server running another MQTT Broker.
 
-On most home network, that should be possible in the DNS settings of the WiFi router by adding an entry for `mqtt.sydpower.com`.
+On most home networks, that can be done in the DNS settings of the WiFi router by adding an entry for `mqtt.sydpower.com`.
 
-If your WiFi router cannot do that of if you do not have access to the WiFi router settingsthen your only alternative is probably to create a new WiFi hostspot.
+If your WiFi router cannot do that of if you do not configure it then your only alternative is probably to create a new WiFi hostspot.
 
 The device may have to be restarted in order to connect to the fake `mqtt.sydpower.com`.
 
@@ -32,8 +50,7 @@ protocol mqtt
 allow_anonymous true
 ```
 
-Now, if you want to reuse the same MQTT broker for LeSyd, HomeAssistant, or other client then you probably want
-to secure it a little bit with a second listener port that does not allow anonymous access:
+Now, if you want to reuse the same MQTT broker for LeSyd, HomeAssistant, or other client then you probably want to secure with a second listener port that does not allow anonymous access:
 
 Your Mosquitto listener configuration could look like that:
 
@@ -57,7 +74,7 @@ If your device MAC address is '7C2C34AEF1AA' then the file should contain
 pattern read  7C2C34AEF1AA/client/#
 pattern write 7C2C34AEF1AA/device/#
 ```
-or the more generic version to
+or to allow read and write for everyone
 ```
 pattern readwrite 7C2C34AEF1AA/#
 ```
@@ -66,14 +83,17 @@ Note: 'pattern' cannot be omited here because this is a not a true anonymous con
 
 ## LeSyd Requirements
 
-- Python 3   (tested with version 3.13.3)
+- Python 3 (tested with version 3.13.3)
 - Python packages:
    - paho-mqtt  "MQTT client"
-   - json       
    - yaml   
    - yamale     "a schema and validator for YAML"
    
-Those Python packages are available from `pip` or as system packages on most Linux distributions.
+Those Python packages are available from `pip`.
+
+They may also be provided as system packages by most Linux distributions.
+
+On Debian: `apt install python3-paho-mqtt python3-yaml python3-yamale`
 
 ## Using LeSyd
 

@@ -1,15 +1,16 @@
 # LeSyd - A MQTT wrapper for Sydpower/Fossibot/... portable energy stations
 
-IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. For now, Lesyd requires a WiFi connection that redirects `mqtt.sydpower.com`  to a local server.
+IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. For now, Lesyd requires a WiFi connection that redirects `mqtt.sydpower.com`  to a local server. 
 
 ## Known issues / TODO LIST
 
 - Not tested with AFERIY batteries such as the P210 and P310. That may work or brick your device so, please, contact me if you own one of those.
-- Probably a lot of small bugs everywhere. Do not hesitate to fill but reports
+- Probably a lot of small bugs an typos everywhere. Do not hesitate to fill bug reports.
 - transport 'tcp+tls' is not tested and is probably broken. Help wanted. Please use 'tcp' for now.
 - option 'loglevel' is ignored. Logging is currenly using level 'info'
 - options `extension1` and `extension2` are not yet implemented. The StateOfCharge is not reported for extension batteries.
-- Changing the value of number entities (`ac_charging_booking`, `dc_max_charging_current`,`discharge_lower_limit`, ...) is not smooth at all in HomeAssistant: Too much traffic and lag between HA, LeSyd and the device.
+- Changing the value of number entities (`ac_charging_booking`, `dc_max_charging_current`, `discharge_lower_limit`, ...) is not smooth at all in HomeAssistant: There is too much traffic and lag between HA, LeSyd and the device.
+- Implement the connection to the real `mqtt.sydpower.com` located in China. The method is known but I am not convinced that this is worth the effort: Too slow and too many disconnects. 
 
 ## References
 
@@ -136,7 +137,7 @@ Start LeSyd with
 python3 lesyd.py -c config.yaml 
 ```
 
-If case of success, then the device state should start being published on topic `/lesyd/7c2c67abfd1a/#` 
+Im case of success the device state should start being published on topic `/lesyd/7c2c67abfd1a/#` with a json payload. 
 
 If nothing happens then that probably means that the MQTT server is not properly connected to the device.  
 

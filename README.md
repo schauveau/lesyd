@@ -17,7 +17,7 @@ IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. Fo
 
 Because of Sydpower, the OEM company that provides the devices.
 
-Also, I am French and this is a reference to (Le Cid)[https://en.wikipedia.org/wiki/Le_Cid], a well known French tragicomedy written by Pierre Corneille in 1636.
+Also, I am French and this is a reference to [Le Cid](https://en.wikipedia.org/wiki/Le_Cid), a well known French tragicomedy written by Pierre Corneille in 1636.
 
 
 ## How to redirect the device MQTT traffic?
@@ -123,7 +123,7 @@ devices:
      state_refresh: 30
 ```
 
-See in (configuration.md)[configuration.md] for a more detailed description of the YAML configuration file.
+See [configuration.md](configuration.md) for a more detailed description of the YAML configuration file.
 
 Start LeSyd with
 

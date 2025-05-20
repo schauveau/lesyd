@@ -62,16 +62,15 @@ This is where the **LeSyd** messages are sent.
   
 ## `mqtt_sydpower` section
 
-The `mqtt_sydpower` section specifies how to connect to the MQTT broker that handles the device messages.
+The `mqtt_sydpower` section is similar to `mqtt_client` but it specifies how to connect to the MQTT broker that handles the device messages (i.e. the redirected `mqtt.sydpower.com` on port 1883).
 
-That section is optional. When missing, the connection to the client MQTT broker will be reused.  
+That section is optional. When missing, the `mqtt_client` connection will be reused.  
 
-**Warning:** An empty `mqtt_sydpower` section is not considered to be missing. It will use the default settings (i.e. `localhost`, port 1083, ...)
+**Warning:** An empty `mqtt_sydpower` section is not considered to be missing. It will use the default settings (i.e. `localhost`, port 1083, ...).
 
-## `devices` section 
+## `devices` section
 
-That section is a dictionnary of device settings. Each key shall be a device mac address in **lowercase**, so 
-exactly 12 characters amongst '0123456789abcdef'.
+That section is a dictionnary of device settings. Each key shall be a device mac address in **lowercase**, so exactly 12 characters from `0123456789abcdef`.
 
 Example:
 ```yaml

@@ -11,6 +11,11 @@ IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. Fo
 - options `extension1` and `extension2` are not yet implemented. The StateOfCharge is not reported for extension batteries.
 - Changing the value of number entities (`ac_charging_booking`, `dc_max_charging_current`,`discharge_lower_limit`, ...) is not smooth at all in HomeAssistant: Too much traffic and lag between HA, LeSyd and the device.
 
+## References
+
+- The [Fossibot Home Assistant integration](https://github.com/iamslan/fossibot) is where everything started.
+- [Sydpower-MQTT](https://github.com/schauveau/sydpower-mqtt) is a python script to help reverse engineer the MQTT messages used by the Sydpower/Fossibot devices.
+
 ## FAQ
 
 ### Why LeSyd?

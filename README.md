@@ -127,8 +127,8 @@ mqtt_client:
   username: 'USERNAME'  
   password: 'PASSWORD'  
 
+# Reminder: All entries in the device section must use a lowercase MAC address.
 devices:
-  # Reminder: MAC address must be lowercase 
   '7c2c67abfd1a':
      name:   'myf2400'
      preset: 'F2400-B'

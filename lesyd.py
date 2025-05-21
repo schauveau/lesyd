@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+import io
 import sys
 import paho.mqtt.client as mqtt
 import argparse
@@ -11,6 +12,7 @@ import json
 import yaml
 import yamale
 import logging
+import logging.config as LoggingConfig
 
 LESYD_VERSION = "1.0"
 
@@ -56,7 +58,8 @@ DeviceInfo:
    extension1:      bool(required=False)
    extension2:      bool(required=False)
    exclude:         list(str,required=False)
-   loglevel:        enum('debug','info','warning','error', required=False)
+   loglevel:        include('LogLevel',required=False)
+   logging_config:  str(required=False)
    state_refresh:   int(min=3,max=60,required=False)
    input_refresh:   int(min=3,max=60,required=False)
    holding_refresh: int(min=3,max=60,required=False)
@@ -79,9 +82,13 @@ MqttInfo:
    password:  str(required=False)
    tls:       include('Tls', required=False)
 
+LogLevel: enum('DEBUG','INFO','WARNING','ERROR','CRITICAL')
+
 Global:
    lesyd_name:   regex('^[0-9a-zA-Z_]+$',required=False)
-   loglevel:     enum('debug','info','warning','error','critical',required=False)     
+   logconfig:    str(required=False)
+   logfile:      str(required=False)
+   loglevel:     include('LogLevel',required=False)   
    ha_discovery: bool(required=False)
    ha_prefix:    str(required=False)
 
@@ -95,13 +102,13 @@ Global:
 YAML_SAMPLES=[
     '''
 global:
-    loglevel: info   # one of debug, info, warning, error, critical
+    loglevel: INFO   # one of DEBUG, INFO, WARNING, ERROR, CRITICAL
     
 # The client MQTT broker where the 'lesyd' message are produced.
 # See https://eclipse.dev/paho/files/paho.mqtt.python/html/client.html for more details.
 # TODO: Add support for websockets transport?
 
-# The mqtt_client section is mandatory but all fields are optional
+# The mqtt_client section is mandatory but all fields are optionals
 mqtt_client:
      hostname: 'mqtt.private' # default is 'localhost' 
      port:     1234           # default ports are 1883 (mqtt), 8883 (mqtts)   
@@ -118,11 +125,9 @@ devices:
   'abcdefabcdef':
      name: 'my_f2400'      
      exclude: [ dc_output  ]  
-     loglevel: debug 
+     loglevel: DEBUG 
   'abcdef123456':
-     name: 'my_f3600'
-      
-     
+     name: 'my_f3600'          
     
 '''
 ,
@@ -138,6 +143,45 @@ devices:
 
 '''
 ]
+
+DEFAULT_LOGGING_INI = '''
+[loggers]
+keys=root
+
+[handlers]
+keys=consoleHandler,fileHandler_%(has_logfile)s
+
+[formatters]
+keys=fileFormatter,consoleFormatter
+
+[logger_root]
+level=%(loglevel)s
+handlers=consoleHandler,fileHandler_%(has_logfile)s
+
+[handler_consoleHandler]
+class=StreamHandler
+level=DEBUG
+formatter=consoleFormatter
+args=(sys.stderr,)
+
+[handler_fileHandler_yes]
+class=FileHandler
+level=DEBUG
+formatter=fileFormatter
+args=('%(logfile)s',)
+
+[handler_fileHandler_no]
+class=NullHandler
+
+[formatter_fileFormatter]
+format=%(asctime)s [%(levelname)s] %(name)s: %(message)s
+datefmt=%Y-%m-%d-%H:%M:%S
+
+[formatter_consoleFormatter]
+format=[%(levelname)s] %(name)s: %(message)s
+datefmt=%Y-%m-%d-%H:%M:%S
+'''
+
 
 
 
@@ -359,7 +403,7 @@ class Device():
     FUNC_WRITE_HOLDING_REGISTER=6
 
     LED_CHOICES=['Off', "On", "SOS", "Flash"]
-    
+
     # Up to 24 hours of MAX_AC_CHARGING_BOOKING
     MAX_AC_CHARGING_BOOKING=24*60-1   
 
@@ -378,9 +422,10 @@ class Device():
 
         self.name = device_options.get('name') or mac   # A user friendly name (unique) 
         
-        self.logger = logging.getLogger("lesyd."+self.name)
-        self.logger.setLevel(logging.INFO)
+        self.logger = logging.getLogger("lesyd.dev."+self.name)
 
+        print("======", self.logger, self.logger.level, self.logger.parent, self.logger.propagate, self.logger.getEffectiveLevel())
+        
         if self.name in ['bridge']:
             self.logger.error("Device name '%s' is reserved.", self.name)            
             sys.exit(1)
@@ -431,7 +476,7 @@ class Device():
         # and when that request was published.
         self.current_request_time = 0   
         # The timeout after which we stop waiting for the request.
-        self.request_timeout = 0.5
+        self.request_timeout = 0.3
 
         # All possible fields. Some may be excluded from the published state        
         self.all_fields = [
@@ -547,7 +592,7 @@ class Device():
                 do_publish = False
 
             if do_publish:
-                self.logger.info("Publish state %s",self.state)                                
+                self.logger.debug("Publish state %s",self.state)                                
                 main.mqtt_client.publish(self.topic_state,
                                          json.dumps(self.state,sort_keys=True))
                 self.state_last = self.state.copy()
@@ -555,11 +600,13 @@ class Device():
 
         if main.mqtt_sydpower.is_connected() :
 
-            ### Send a single request to the device
+            ### The device can only process one request at a time so
+            ### send them one by one
 
             if self.current_request:
                 if now > self.current_request_time + self.request_timeout:
-                    # Stop waiting for a response after a short delay
+                    # We do not want to be stuck if a message was lost
+                    # so stop waiting for a response after a short delay.
                     self.current_request = None
                 elif self.request_queue.qsize() > 10: 
                     # Do not wait if the queue is growing too much 
@@ -611,18 +658,15 @@ class Device():
 
         status = 'online'
         if len(payload)==1 :
-            print("==================== {} ===============",)
             code = payload[0]
             if code == 0x30:
                 # Sent by the device before it turns off. 
                 # Is that a 'will' message?
                 # Unfortunately, it is not retained.
-                print("==================== OFFLINE ===============")
                 status = 'offline'
             elif code == 0x31:
                 # Sent by the device after connecting.
                 # Is that a 'birth' message? 
-                print("==================== ONLINE ===============")
                 pass
 
         self.set_status(status) 
@@ -842,7 +886,6 @@ class Device():
                     value   = int(self.payload_to_float(msg.payload,
                                                         self.MIN_DISCHARGE_LOWER_LIMIT/10.0,
                                                         self.MAX_DISCHARGE_LOWER_LIMIT/10.0)*10.0)
-                    print("WRITE: HREG_DISCHARGE_LOWER_LIMIT ",value)
                     request = self.encode_WriteHoldingRegister(HREG_DISCHARGE_LOWER_LIMIT, value)
                     self.request_queue.put(request)  
                 elif command=='/set/ac_charging_upper_limit':
@@ -945,26 +988,47 @@ class LeSyd :
     def __init__(self) :
 
 
-        logging.basicConfig(stream=sys.stdout,
-                            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                            datefmt="%Y-%m-%d-%H:%M:%S"
+        default_log_fmt       = "[%(levelname)s] %(name)s: %(message)s"
+        default_log_time_fmt  = "%(asctime)s "+default_log_fmt
+        default_log_date_fmt = "%Y-%m-%d-%H:%M:%S"
+        
+        logging.basicConfig(stream=sys.stderr,
+                            format=default_log_fmt,
+                            datefmt=default_log_date_fmt,
                             )
         
         self.logger = logging.getLogger("lesyd")
-        self.logger.setLevel(logging.INFO)
-        self.logger.info("hello")
+        # self.logger.setLevel(logging.INFO)
 
         parser = argparse.ArgumentParser()
 
-        parser.add_argument('-c', '--config', default='lesyd.yaml')
-        parser.add_argument('--sample-config', action='store_true',
+        parser.add_argument('-c', '--config')
+        parser.add_argument('--logconfig',
+                            default=None,
+                            help="Set the logging configuration file"
+                            )
+        
+        parser.add_argument('--logfile',
+                            default=None,
+                            help="Enable logging to the specified file"
+                            )
+        
+        parser.add_argument('--loglevel',
+                            choices=['DEBUG','INFO','WARNING','ERROR',"CRITICAL"],
+                            default=None,
+                            help="Set the log level. Default is INFO"
+                            )
+
+        parser.add_argument('--print-sample-config', action='store_true',
                      help="print a sample configuration file and quit")
         parser.add_argument('--list-presets', action='store_true',
                      help="print all presets and quit")
+        parser.add_argument('--print-default-logconfig', action='store_true',
+                     help="print the default logging configuration file")
         
         args=parser.parse_args()
-        
-        if args.sample_config:
+
+        if args.print_sample_config:
             print( YAML_SAMPLES[0] )
             sys.exit(0)
 
@@ -977,17 +1041,65 @@ class LeSyd :
                     else:
                         print("   {}: {}".format(k,v))
                 print()
-
             sys.exit(0)
 
+        if args.print_default_logconfig:
+            print( DEFAULT_LOGGING_INI )
+            sys.exit(0)
             
-        # Always validate the sample configuration to
-        # insure that it is kept up to date. 
+        # Always validate the sample configurations to insure that they are kept up to date. 
         self.validate_yaml_samples()
-
+        
+        if args.config is None:
+            self.logger.critical('No config file specified')
+            sys.exit(1)
+                    
         yamale_data = yamale.make_data(args.config)
-        config = self.validate_yaml(yamale_data)
+        config = self.validate_yaml("'"+args.config+"'", yamale_data)
 
+        global_config = {
+            'lesyd_name'   : 'lesyd',
+            'loglevel'     : 'INFO',
+            'ha_discovery' : False,
+            'ha_prefix'    : 'homeassistant',
+        }
+        global_config.update( config.get('global',None) or {} )
+        
+        logfile = global_config.get('logfile')
+        if args.logfile is not None:       
+            logfile = args.logfile 
+        if not logfile:
+            logfile = '' 
+            
+        logconfig = global_config.get('logconfig')
+        if args.logconfig is not None:
+            logconfig = args.logconfig 
+        if not logconfig:
+            logconfig = io.StringIO(DEFAULT_LOGGING_INI)
+        
+        loglevel = global_config.get('loglevel')
+        if args.loglevel:
+            loglevel = args.loglevel
+        if not loglevel:
+            loglevel = 'INFO'
+        
+        LoggingConfig.fileConfig(
+            logconfig,
+            defaults={
+                'logfile': logfile ,
+                'loglevel': loglevel,
+                'has_logfile': 'yes' if logfile else "no" 
+            },
+            disable_existing_loggers=False
+        )
+            
+        # self.logger.setLevel(logging.INFO)
+        # self.logger.debug("hello")
+        # self.logger.info("hello")
+        # self.logger.warning("hello")
+        # self.logger.error("hello")
+        # self.logger.critical("hello")
+        
         ### 'mqtt_client' section of configuration file 
 
         self.mqtt_client_config = self.get_mqtt_config( config, "mqtt_client" )
@@ -1003,14 +1115,6 @@ class LeSyd :
 
         ### 'homeassistant' section of configuration file
 
-        global_config = {
-            'lesyd_name'   : 'lesyd',
-            'loglevel'     : 'info',
-            'ha_discovery' : False,
-            'ha_prefix'    : 'homeassistant',
-        }
-        global_config.update( config.get('global',None) or {} )
-        
         self.ha_discovery = global_config['ha_discovery']
         self.ha_prefix    = global_config['ha_prefix']
         self.loglevel     = global_config['loglevel']
@@ -1141,11 +1245,12 @@ class LeSyd :
         
 
     def validate_yaml_samples(self):
+        n=0
         for sample in YAML_SAMPLES:
-            yamale_data = yamale.make_data(content=sample)
-            self.validate_yaml(yamale_data)
+            yamale_data = yamale.make_data( content=sample)
+            self.validate_yaml('YAML_SAMPLES['+str(n)+']',yamale_data)
             
-    def validate_yaml(self, yamale_data):
+    def validate_yaml(self, what, yamale_data):
         
         # Note: This is not officially documented but yamale.make_data() outputs
         # a list of tuple (data,filename) where
@@ -1163,10 +1268,10 @@ class LeSyd :
         try :
             yamale.validate( YAMALE_SCHEMA, yamale_data)
         except yamale.yamale_error.YamaleError as e:
-            print('Validation failed!\n')
+            self.logger.error('Validation of %s failed',what)
             for result in e.results:
                 for error in result.errors:
-                    print('\t%s' % error)
+                    self.logger.error("%s",error)
                 sys.exit(1)
 
         config = yamale_data[0][0]

@@ -8,6 +8,7 @@ IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. Fo
 
 ## Changelog
 
+2025-04-21 : Added proper logging support.
 2025-04-20 : Added proper support for TLS connections (not tested)
 2025-04-20 : First version
 
@@ -16,7 +17,6 @@ IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. Fo
 
 - Not tested with AFERIY batteries such as the P210 and P310. That may work or brick your device so, please, contact me if you own one of those.
 - Probably a lot of small bugs an typos everywhere. Do not hesitate to fill bug reports.
-- option 'loglevel' is ignored. Logging is currenly using level 'info'
 - options `extension1` and `extension2` are not yet implemented. The StateOfCharge is not reported for extension batteries.
 - Changing the value of number entities (`ac_charging_booking`, `dc_max_charging_current`, `discharge_lower_limit`, ...) is not smooth at all in HomeAssistant: There is too much traffic and lag between HA, LeSyd and the device.
 - Implement the connection to the real `mqtt.sydpower.com` located in China. The method is known but I am not convinced that this is worth the effort: Too slow and too many disconnects. 

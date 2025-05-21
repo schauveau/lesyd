@@ -8,21 +8,31 @@ An sample configuration file can be obtained by running the python script with t
 
 The `global` section is optional and contains miscellaneous settings with a global effect. 
 
-- `loglevel`
-  - Set the logging level for the whole application. The level can also be set for each device.  
-  - The value must be one of `debug`, `info`, `warning`, `error` or `critical`
-  - The default is `info`
+All settings are optional unless specified otherwise.
 
-- `lesyd_name` 
+- `loglevel: [DEBUG,INFO,WARNING,ERROR,CRITICAL]` 
+  - Set the default logging level.
+  - See also the `--loglevel` command line option.
+  - The default is `INFO`
+
+- `logconfig FILENAME`
+  - Configure LeSyd logging configuration from a configparser-format file.
+  - Refer to the [Python3 `logging.config` module][https://docs.python.org/3/library/logging.config.html] module for more details.
+  - See also the `--loglevel` command line option.
+
+- `logfile FILENAME`
+  - Enable logging to a file.  
+
+- `lesyd_name IDENTIFIER` 
    - Change the identifier used by LeSyd in mqtt topics.
-   - the value must be a non-empty string containing only digits, letters and underscore (`_`).
+   - the identifier must be a non-empty string containing only digits, letters and underscore (`_`).
    - The default is `lesyd`
    
-- `ha_discovery`
+- `ha_discovery BOOLEAN`
    - Enable autodiscovery  
    - The default is `false`
    
-- `ha_prefix`
+- `ha_prefix STRING`
    - change the prefix used by HomeAssistant MQTT discovery   
    - The default is `homeassistant`
 
@@ -31,18 +41,18 @@ The `global` section is optional and contains miscellaneous settings with a glob
 That section specifies how to connect to the client MQTT broker.
 This is where the **LeSyd** messages are sent. 
   
-- `transport`
+- `transport [tcp,unix,websocket]`
   - Specify the type of connection to the MQTT Broker
   - Possible values are 
      - `tcp` this the default 
      - `unix` to use a UNIX socket (not yet implemented)
      - `websocket` (not yet implemented)
 
-- `hostname`
+- `hostname STRING`
   - A hostname or IP address
   - Default is `localhost`   
 
-- `port`
+- `port NUMBER `
   - A port number between 0 and 65535
   - The default port is set according to `transport` and `tls`:
      - 1883 for `tcp` without tsl
@@ -51,11 +61,11 @@ This is where the **LeSyd** messages are sent.
      - 8083 for `websocket` 
      - 8084 for `websocket` with tls
 
-- `username`
+- `username STRING`
   - An optional username.
   - If not specified, an anonymous connection will be attempted. 
 
-- `password` 
+- `password STRING` 
   - An optional password
 
 - `tls`
@@ -69,35 +79,35 @@ The `mqtt_sydpower` section is similar to `mqtt_client` but it specifies how to 
 That section is optional. When missing, the `mqtt_client` connection will be reused.  
 
 **Warning:** An empty `mqtt_sydpower` section is not considered to be missing. It will use the default settings (i.e. `localhost`, port 1083, ...).
-
+m
 ### `tls` subsection 
 
 TLS encryption is enabled when that subsection is found in a `mqtt_client` or `mqtt_sydpower` section.
 
 The entries in that subsection correspond to the argument of the `tls_set` and `tls_insecure` members of `paho.mqtt.client.Client`. See also https://eclipse.dev/paho/files/paho.mqtt.python/html/client.html#paho.mqtt.client.Client 
 
-- `ca_certs`
+- `ca_certs STRING`
    - An optional path to the Certificate Authority certificate files that are to be treated
    as trusted by this client. If not set, the default certification authority of the system is used.
 
-- `certfile`   
+- `certfile STRING`   
    - An optional PEM encoded client certificate filename. Used with keyfile for client TLS based authentication
 
-- `keyfile`
+- `keyfile STRING`
    - An optional PEM encoded client private keys filename. Used with certfile for client TLS based authentication
 
-- `keyfile_password`
+- `keyfile_password STRING`
    - An optional password used when `keyfile` and `certfile` are encrypted. 
    
-- `version`
+- `version [ default, tlsv1.2, tlsv1.1, tlsv1 ]`
    - An optional string that describes a TLS version.
    - Allowed values are `default`, `tlsv1.2`, `tlsv1.1` and `tlsv1`.   
 
-- `ciphers`
+- `ciphers STRING`
    - An optinal string describing the encryption ciphers that are allowed for this connection.
    - If not set the default ciphers are used. 
 
-- `insecure`
+- `insecure BOOLEAN`
    - When set to True, disable the verification of the server hostname in the server certificate.
    - The default is False
 
@@ -125,27 +135,27 @@ At least one device must be specified.
 
 The dictionary value is a structure containing the following fields:
 
-- `name`:
+- `name STRING`:
    - The device name used in mqtt topics and in HA entities.
    - All LeSyd devices shall have a different name.
    - The name shall only contain digits, letters and underscores.    
    - The default is to use the mac address.
     
-- `preset`
+- `preset STRING`
    - A preset name to automatically fill some the device fields.
    - Run `lesyd.py` with the option `--list-presets` to display the presets.
           
-- `manufacturer`
+- `manufacturer STRING`
    - The name of the device manufacturer
    - Used only in HomeAssistant discovery
    - Default is `Unknown`
     
-- `model_id`
+- `model_id STRING`
    - The device model identifier
    - Used only in HomeAssistant discovery
    - Default is `Unknown`
    
-- `exclude`
+- `exclude  LIST_OF_STRING`
    - Optional.
    - Contain a list of field names to be excluded from the published states.
    - They are also excluded from HomeAssistant discovery.
@@ -161,7 +171,7 @@ The dictionary value is a structure containing the following fields:
         - state_of_charge
         - led
    ```
-- `ac_charging_levels`:
+- `ac_charging_levels LIST_OF_INTEGERS`:
   - Optional
   - A list of power values for the state field `ac_charging_rate` 
   - If specified then a field `ac_power_level` is added to the state.
@@ -170,31 +180,29 @@ The dictionary value is a structure containing the following fields:
   ac_charging_levels: [300, 500, 700, 900, 1100] 
   ```
 
-- `loglevel`
-  - Set the logging level for the whole application. The level can also be set for each device.  
-  - Allowed values are `debug`, `info`, `warning`, `error` and `critical`
-  - The default is to reuse the global `loglevel`.
-
-- `state_refresh`   
+- `state_refresh INTEGER`   
   - Specify after how many seconds, the state shall be re-published if it did not change. 
   - The allowed range is `[3,60]`
   - The default is 30
 
-- `input_refresh`   
+- `input_refresh INTEGER`   
   - Specify the delay in seconds between two queries of the device input registers.
   - The allowed range is `[3,60]`
   - The default is 6
   - Using a low value will increase the update frequency of most state fields.
   
-- `holding_refresh` 
+- `holding_refresh INTEGER` 
   - Specify the delay in seconds between two queries of the device holding registers.
   - The allowed range is `[3,60]`
   - The default is 30
   - In practice, that setting should only affect the update frequency of:
      - `ac_silent_charging` if it was modified from another source (e.g. the official BrightEMS application)     
    
-- `extension1` and `extension2`
-  - a boolean value to indicate if the 1st or 2nd extension battery is present.
-  - if false thenv all fields related to that extension battery will be removed from the published state.  
-  - default is False
-   
+- `extension1 BOOLEAN`
+  - a boolean value to indicate if the 1st extension battery is present.
+  - if false then all fields related to that extension battery will be removed from the published state.  
+  - default is false
+
+- `extension2 BOOLEAN`
+  - Same as `extension1` but for the 2nd extension battery
+  

@@ -258,14 +258,17 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
         },        
         'state_topic': device.topic_state,        
     }
-    
+
+    # "entity_category": "diagnostic",
+    # "entity_category": "config",
+            
     components = {
         ##### Sensor #####
         "state_of_charge": {
             "platform": "sensor",
             "name": "State of Charge",
             "device_class": "battery",   
-            "unit_of_measurement": "%"
+            "unit_of_measurement": "%",
         },
         "ac_output_power": {
             "platform": "sensor",
@@ -287,7 +290,8 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
             "platform": "sensor",
             "name": "Ac Charging Level",
             "device_class": "power",
-            "unit_of_measurement": "W"
+            "unit_of_measurement": "W",
+            "entity_category": "diagnostic", 
         },
         ##### Select #####
         "led":{
@@ -310,7 +314,8 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
             "unit_of_measurement": "A",
             "min"  : 1,
             "max"  : device.DC_MAX_CHARGING_CURRENT,
-            "step" : 1
+            "step" : 1,
+            "entity_category": "config",
         },
         "discharge_lower_limit": {
             "platform": "number",
@@ -318,7 +323,8 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
             "unit_of_measurement": "%",
             "min"  : device.MIN_DISCHARGE_LOWER_LIMIT/10.0,
             "max"  : device.MAX_DISCHARGE_LOWER_LIMIT/10.0,
-            "step" : 0.1
+            "step" : 0.1,
+            "entity_category": "config",
         },
         "ac_charging_upper_limit": {
             "platform": "number",
@@ -326,7 +332,8 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
             "unit_of_measurement": "%",
             "min"  : device.MIN_AC_CHARGING_UPPER_LIMIT/10.0,
             "max"  : device.MAX_AC_CHARGING_UPPER_LIMIT/10.0,
-            "step" : 0.1
+            "step" : 0.1,
+            "entity_category": "config",
         },
 
         ##### Switch #####
@@ -360,6 +367,7 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
             "name": "Key Sound",
             "payload_on": True,
             "payload_off": False,
+            "entity_category": "config",
         },
         
     }

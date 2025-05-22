@@ -157,3 +157,5 @@ If you have Home Assistant with the MQTT integration then enable `ha_discovery` 
 A new device should appear in the MQTT integration with the specified name (that would be `myf2400` in the previous example).
 
 
+![Home Assistant Screenshot](./pictures/HomeAssistant.png)
+

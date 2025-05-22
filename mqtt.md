@@ -93,16 +93,16 @@ Contain the device state in JSON format.
   - Writable at `lesyd/DEVICE/set/dc_output`
 
 - `discharge_lower_limit`
-  - AC charging is disabled once the state of charge reaches that value.
-  - Value is a percentage between `60.0` and `100.0` 
-  - Writable at `lesyd/DEVICE/set/ac_charging_upper_limit`
+  - Disable all output ports if `state_of_charge` is below that value.
+  - Value is a percentage between `0.0` and `50.0` 
+  - Writable at `lesyd/DEVICE/set/discharge_lower_limit`
 
 - `key_sound`
   - When `true` a sound is produced when switches are activated.
   - Writable at `lesyd/DEVICE/set/key_sound`
 
 - `led`
-  - The state of the Led panel
+  - The state of the Led panel.
   - Can be one of `Off`, `On`, `SOS`, `Flash`
   - Writable at `lesyd/DEVICE/set/led`  
 

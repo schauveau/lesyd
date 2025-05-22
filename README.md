@@ -148,7 +148,7 @@ python3 lesyd.py -c config.yaml
 In case of success, the device state should start being published at regular interval on topic `/lesyd/7c2c67abfd1a/#` with a json payload. 
 
 
-If nothing happens then that probably means that the MQTT server is not properly connected to the device.  
+If nothing happens then that probably means that the MQTT server is not properly connected to the device.
 
 ## Home Assistant MQTT auto-discovery
 

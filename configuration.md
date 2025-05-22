@@ -171,7 +171,7 @@ The dictionary value is a structure containing the following fields:
         - state_of_charge
         - led
    ```
-- `ac_charging_levels LIST_OF_INTEGERS`:
+- `ac_charging_levels LIST_OF_INTEGERS`
   - Optional
   - A list of power values for the state field `ac_charging_rate` 
   - If specified then a field `ac_power_level` is added to the state.
@@ -179,6 +179,11 @@ The dictionary value is a structure containing the following fields:
   ```
   ac_charging_levels: [300, 500, 700, 900, 1100] 
   ```
+  
+- `guess_ac_input_power BOOL`
+  - For devices that do not provide a measure of their AC Input Power, guess that value
+    in a field `ac_input_power` using the formula `max(0,total_input_power-dc_charging_power)`.
+  - The default is False
 
 - `state_refresh INTEGER`   
   - Specify after how many seconds, the state shall be re-published if it did not change. 

@@ -24,7 +24,7 @@ PRESETS = {
     'F2400-B': {
         'manufacturer':'Fossibot',
         'model_id': 'F2400',
-        'ac_charging_levels': [ 300,500,700,900,1100 ],
+        'ac_charging_levels': [ 300, 500, 700, 900, 1100 ],
         'extension1': False,
         'extension2': False,
     }, 
@@ -64,6 +64,7 @@ DeviceInfo:
    input_refresh:   int(min=3,max=60,required=False)
    holding_refresh: int(min=3,max=60,required=False)
    ac_charging_levels: list(include('PowerLevel'),min=1,required=False)
+   guess_ac_input_power: bool(required=False)
 
 Tls:
    ca_certs: str(required=False)
@@ -182,15 +183,12 @@ format=[%(levelname)s] %(name)s: %(message)s
 datefmt=%Y-%m-%d-%H:%M:%S
 '''
 
-
-
-
 main = None    # will contain the main Lesyd object
 
 COUNT_IREG = 80 
 IREG_AC_CHARGING_RATE = 2  
-IREG_CHARGING_POWER = 3  
-IREG_DC_INPUT_POWER = 4
+IREG_AC_CHARGING_POWER = 3  
+IREG_DC_CHARGING_POWER = 4
 IREG_TOTAL_INPUT_POWER = 6
 IREG_DC_OUTPUT_POWER_1 = 9
 IREG_LED_POWER = 15
@@ -263,6 +261,10 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
     # "entity_category": "config",
             
     components = {
+        ##### Obsolete entities must be provided with their platform to clean them from the HA database
+        "dc_input_power": {
+            "platform": "sensor",
+        },
         ##### Sensor #####
         "state_of_charge": {
             "platform": "sensor",
@@ -276,19 +278,56 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
             "device_class": "power",
             "unit_of_measurement": "W"
         },
+        "dc_output_power": {
+            "platform": "sensor",
+            "name": "DC Output Power",
+            "device_class": "power",
+            "unit_of_measurement": "W"
+        },
+        "dc_charging_power": {
+            "platform": "sensor",
+            "name": "DC Charging Power",
+            "device_class": "power",
+            "unit_of_measurement": "W"
+        },
+        "usb_output_power": {
+            "platform": "sensor",
+            "name": "USB Output Power",
+            "device_class": "power",
+            "unit_of_measurement": "W"
+        },
+        "ac_input_power": {
+            "platform": "sensor",
+            "name": "AC Input Power",
+            "device_class": "power",
+            "unit_of_measurement": "W"
+        },
+        "ac_charging_power": {
+            "platform": "sensor",
+            "name": "AC Charging Power",
+            "device_class": "power",
+            "unit_of_measurement": "W"
+        },
         "charging_power": {
             "platform": "sensor",
             "name": "Charging Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
+        "total_input_power": {
+            "platform": "sensor",
+            "name": "Total Input Power",
+            "device_class": "power",
+            "unit_of_measurement": "W"
+        },
         "ac_charging_rate": {
             "platform": "sensor",
-            "name": "Ac Charging Rate",
+            "name": "AC Charging Rate",
+            "entity_category": "diagnostic", 
         },
         "ac_charging_level": {
             "platform": "sensor",
-            "name": "Ac Charging Level",
+            "name": "AC Charging Level",
             "device_class": "power",
             "unit_of_measurement": "W",
             "entity_category": "diagnostic", 
@@ -453,7 +492,6 @@ class Device():
         # The topics for the LOCAL MQTT server
         self.topic_root        = lesyd.name + "/" + self.name
         self.topic_state       = self.topic_root + "/state"
-        self.topic_state       = self.topic_root + "/state"
         #self.topic_config       = self.topic_state + '/config'
 
         # 
@@ -492,7 +530,11 @@ class Device():
             'ac_output',
             'ac_output_power',
             'ac_silent_charging',
+            'ac_input_power',
+            'ac_charging_power',
+            'dc_charging_power',
             'charging_power',
+            'total_input_power',
             'dc_output',
             'led' ,
             'state_of_charge',
@@ -503,8 +545,9 @@ class Device():
             'ac_charging_upper_limit',
             'discharge_lower_limit',
             'ac_charging_level',
+            'usb_output_power',
+            'dc_output_power',            
         ]
-
 
         self.state_last_time = 0   # Time of the last state publication   
         self.state_last = None     # Last published state   
@@ -522,6 +565,7 @@ class Device():
             'state_refresh': DEFAULT_STATE_REFRESH,
             'input_refresh': DEFAULT_INPUT_REFRESH,
             'holding_refresh': DEFAULT_HOLDING_REFRESH,
+            'guess_ac_input_power': False,
             'exclude' : []
         }
             
@@ -546,11 +590,15 @@ class Device():
         self.input_refresh   = options['input_refresh']
         self.holding_refresh = options['holding_refresh']
         self.loglevel        = options['loglevel']
+        self.guess_ac_input_power = options['guess_ac_input_power']
 
         self.ac_charging_levels = options['ac_charging_levels']
         if self.ac_charging_levels is None:
-            del state['ac_charging_level']
-                            
+            del self.state['ac_charging_level']
+
+        if not self.guess_ac_input_power:
+            del self.state['ac_input_power']
+            
         self.DC_MAX_CHARGING_CURRENT = 20  # TODO: add config option 
         
         # Probably not needed except for debug
@@ -733,15 +781,46 @@ class Device():
                 self.input_response_time = now 
                 
                 self.update_state( 'state_of_charge', data[IREG_STATE_OF_CHARGE] / 10.0 ) 
+               
                 status_bits = data[IREG_STATUS_BITS]
                 self.update_state( 'ac_output',  (status_bits & (1<<11)) != 0 ) 
                 self.update_state( 'dc_output',  (status_bits & (1<<10)) != 0 ) 
                 self.update_state( 'usb_output', (status_bits & (1<<9)) != 0 ) 
+                # TODO: we could also provide the status_bits in the state.  
+                
+                self.update_state( 'total_input_power', data[IREG_TOTAL_INPUT_POWER] ) 
 
-                self.update_state( 'charging_power', data[IREG_CHARGING_POWER] ) 
+                self.update_state( 'charging_power', data[IREG_AC_CHARGING_POWER]+data[IREG_DC_CHARGING_POWER] ) 
+                self.update_state( 'ac_charging_power', data[IREG_AC_CHARGING_POWER] ) 
+                self.update_state( 'dc_charging_power', data[IREG_DC_CHARGING_POWER] ) 
+
+                # There is no register for the ac_input_power but we can infer it
+                # from the total_input_power (so AC+DC) and dc_charging_power
+                # HOW ACCURATE IS THAT?
+                if self.guess_ac_input_power:
+                    self.update_state( 'ac_input_power', max(0,data[IREG_TOTAL_INPUT_POWER] - data[IREG_DC_CHARGING_POWER] ) )
+                
                 self.update_state( 'ac_output_power', data[IREG_AC_OUTPUT_POWER] ) 
                 self.update_state( 'ac_charging_booking', data[IREG_AC_CHARGING_BOOKING] ) 
                 self.update_state( 'ac_charging_rate', data[IREG_AC_CHARGING_RATE] )
+                self.update_state( 'usb_output_power',
+                                   (
+                                       data[IREG_USB_OUTPUT_POWER_1]+
+                                       data[IREG_USB_OUTPUT_POWER_2]+
+                                       data[IREG_USB_OUTPUT_POWER_3]+
+                                       data[IREG_USB_OUTPUT_POWER_4]+
+                                       data[IREG_USB_OUTPUT_POWER_5]+
+                                       data[IREG_USB_OUTPUT_POWER_6]
+                                   ) / 10.0
+                                  ) 
+                self.update_state( 'dc_output_power',
+                                   (
+                                       data[IREG_LED_POWER]+
+                                       data[IREG_DC_OUTPUT_POWER_1]
+                                   ) / 10.0
+                                  )
+
+                
 
 
                 self.update_state( 'led', self.LED_CHOICES[data[IREG_LED_STATE] & 0x3]) 

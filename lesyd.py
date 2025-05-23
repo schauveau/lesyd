@@ -14,7 +14,7 @@ import yamale
 import logging
 import logging.config as LoggingConfig
 
-LESYD_VERSION = "1.0"
+LESYD_VERSION = "0.9"
 
 DEFAULT_STATE_REFRESH=30
 DEFAULT_INPUT_REFRESH=6
@@ -261,9 +261,11 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
     # "entity_category": "config",
             
     components = {
-        ##### Obsolete entities must be provided with their platform to clean them from the HA database
+        ##### Obsolete entities must be provided with their platform
+        ##### to clean them from the HA database
         "dc_input_power": {
             "platform": "sensor",
+            "obsolete": True
         },
         ##### Sensor #####
         "state_of_charge": {

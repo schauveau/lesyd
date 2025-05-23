@@ -150,12 +150,67 @@ In case of success, the device state should start being published at regular int
 
 If nothing happens then that probably means that the MQTT server is not properly connected to the device.
 
-## Home Assistant MQTT auto-discovery
+## Features
+
+### Quick overview of the values provided by LeSys
+
+Below are the names used in the MQTT state (a JSON structure).
+
+In Home Assistant, the entities are named by prefixing them with the device name. 
+
+See ![MQTT.md](./MQTT.md) for a more detailed description of each value. 
+
+- `ac_charging_booking` (RW)
+ 
+- `ac_charging_level`
+ 
+- `ac_charging_power`
+
+- `ac_charging_rate`
+
+- `ac_charging_upper_limit` (RW) 
+ 
+- `ac_input_power`
+ 
+- `ac_output_power`
+
+- `ac_output` (RW)
+  
+- `ac_silent_charging` (RW)
+  
+- `charging_power`
+  
+- `dc_charging_power`
+
+- `dc_max_charging_current` (RW)
+ 
+- `dc_output_power`
+
+- `dc_output` (RW)
+  
+- `discharge_lower_limit` (RW)
+ 
+- `key_sound` (RW) 
+ 
+- `led` (RW)
+ 
+- `state_of_charge` 
+  
+- `total_input_power` 
+  
+- `usb_output_power`
+ 
+- `usb_output` (RW)
+
+
+
+## Home Assistant with MQTT auto-discovery
 
 If you have Home Assistant with the MQTT integration then enable `ha_discovery` in theconfiguration file.
 
 A new device should appear in the MQTT integration with the specified name (that would be `myf2400` in the previous example).
 
-
+ Here is a screenshot of HomeAssistant showing the entities for a Fossibot F2400 (May 22th 2025). 
 ![Home Assistant Screenshot](./pictures/HomeAssistant.png)
+
 

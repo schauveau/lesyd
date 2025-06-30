@@ -1,5 +1,8 @@
 # LeSyd - A MQTT wrapper for Sydpower/Fossibot/... portable energy stations
 
+[!WARNING]
+LeSyd is still in early active developpement. Changes that break existing configurations are likely to happen. 
+
 LeSyd is a python scripts that translate the binary MQTT messages used by the Sydpower/Fossibot energy stations into user-friendly MQTT messages.
 
 LeSyd can also replace the [Fossibot Home Assistant integration](https://github.com/iamslan/fossibot).
@@ -145,8 +148,7 @@ Start LeSyd with
 python3 lesyd.py -c config.yaml 
 ```
 
-In case of success, the device state should start being published at regular interval on topic `/lesyd/7c2c67abfd1a/#` with a json payload. 
-
+In case of success, the device state should be published at regular interval on topic `/lesyd/7c2c67abfd1a/#` with a json payload. 
 
 If nothing happens then that probably means that the MQTT server is not properly connected to the device.
 
@@ -154,7 +156,7 @@ If nothing happens then that probably means that the MQTT server is not properly
 
 ### Quick overview of the values provided by LeSys
 
-Below are the names used in the MQTT state (a JSON structure).
+Below are the names used in the MQTT state (a JSON structure). Unneeded entities can be disabled in the configuration file (see the `exclude` in the device options).  
 
 In Home Assistant, the entities are named by prefixing them with the device name. 
 

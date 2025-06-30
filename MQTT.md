@@ -121,7 +121,7 @@ Contain the device state in JSON format.
   - Can be `true` or `false`.
   - Writable at `lesyd/DEVICE/set/usb_output`
 
-##    
+
 
 
 

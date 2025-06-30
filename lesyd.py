@@ -13,6 +13,7 @@ import yaml
 import yamale
 import logging
 import logging.config as LoggingConfig
+import threading
 
 LESYD_VERSION = "0.9"
 
@@ -44,6 +45,7 @@ global:        include('Global',required=False)
 mqtt_client:   include('MqttInfo')
 mqtt_sydpower: include('MqttInfo', required=False)
 devices:       map( include('DeviceInfo'), key=include('DeviceMac'), min=1 )
+translate:     map( str, str, required=False )
 ---
 
 DeviceMac: regex('^[0-9a-f]{12}$')
@@ -65,7 +67,7 @@ DeviceInfo:
    holding_refresh: int(min=3,max=60,required=False)
    ac_charging_levels: list(include('PowerLevel'),min=1,required=False)
    guess_ac_input_power: bool(required=False)
-
+   ac_manager:      bool(required=False)
 Tls:
    ca_certs: str(required=False)
    certfile: str(required=False)
@@ -208,7 +210,7 @@ IREG_STATUS_BITS = 41
 IREG_STATE_OF_CHARGE_1 = 53
 IREG_STATE_OF_CHARGE_2 = 55
 IREG_STATE_OF_CHARGE = 56
-IREG_AC_CHARGING_BOOKING = 57
+IREG_AC_BOOKING_CHARGING = 57
 IREG_TIME_TO_FULL = 58
 IREG_TIME_TO_EMPTY = 59
 
@@ -221,14 +223,125 @@ HREG_AC_OUTPUT  = 26
 HREG_LED        = 27
 HREG_KEY_SOUND  = 56
 HREG_AC_SILENT_CHARGING = 57
-HREG_AC_CHARGING_BOOKING = 63
+HREG_AC_BOOKING_CHARGING = 63
 HREG_DISCHARGE_LOWER_LIMIT = 66
 HREG_AC_CHARGING_UPPER_LIMIT = 67
 
-def homeassistant_discovery(lesyd, device, mqtt_client):
+def homeassistant_discovery_bridge(lesyd, mqtt_client):
+
+    # TODO !!!!    
+    discovery = {
+        'device': {
+            "identifiers": [ lesyd.name ],
+            "name":         device.name,
+            "manufacturer": "",
+            "model_id":     device.model_id,   
+            "hw_version": "1.0rev2", 
+            # "via_device": "lesyd_bridge_0x123456789abcdef"
+        },
+        'origin': {
+            "name":"LeSyd",
+            "sw": LESYD_VERSION ,
+            "url": "https://github.com/schauveau/lesyd"
+        },
+        'availability' : [
+            { 
+                "topic": lesyd.will_topic,
+            },
+            { 
+                "topic": device.topic_status,
+            }
+        ],
+        "availability_mode": "all",
+        'components': {
+        },        
+        'state_topic': device.topic_state,        
+    }
+
+    
+    topic = lesyd.ha_prefix+'/device/lesyd/bridge/config'
+    
+    device.logger.info("Publish HA discovery on %s",topic)
+    
+    payload = json.dumps(discovery, sort_keys=True)
+    mqtt_client.publish(topic, payload, retain=True)
+
+
+def jinja_str(s):
+    # Hummm ... nothing seems to works fine for '\' but it 
+    # is diffiicult to figure out what is the problem
+    # python, json, HA, jinja, ... so many levels of escaping ...
+    x = s.replace('\\','\\'+'\\')     
+    
+
+    x = s.replace('"','\\"')
+    return '"'+x+'"'
+
+#
+# Convert dictionnary D into a jinja statement of the form
+#
+#  '{% name = {"key1":"value1","key2":"value2", ... } %}'
+#
+def jinja_set_dict(name,D):
+    elems=[]
+    for k,v in D.items() :
+        elems.append( jinja_str(k) + ':' + jinja_str(v) )
+    return '{% set ' + name + '={' + (','.join(elems)) + '} %}' 
+
+def jinja_set_dict_rev(name,D):
+    elems=[]
+    for k,v in D.items() :
+        elems.append( jinja_str(v) + ':' + jinja_str(k) )
+    return '{% set ' + name + '={' + (','.join(elems)) + '} %}' 
+
+# convert a lower_case identifier to a more readable text
+def identifier_to_text(ident):
+    # Replace underscore by spaces and Capitalize all words.
+    text = " " + ident.replace("_"," ").title() + " "
+    # And handle a few special works that should not be Capitalized
+    text = text.replace(" Ac "," AC ")       
+    text = text.replace(" Dc "," DC ")
+    text = text.replace(" Usb "," USB ")
+    text = text.replace(" Of "," of ")
+    text = text.replace(" Ups "," UPS ")
+    return text[1:-1]
+
+def homeassistant_select_discovery(lesyd, field, choices):
+
+    # trans will contain the translations we need to perform
+    trans={}
+    for a in choices:        
+        trans[a] = lesyd.translate.get(a) or identifier_to_text(a)
+
+    if trans:
+        # From a dictionnary of translation trans={'key1':'value1','key2':'value2',}
+        # we want to generate something like that
+        #  - for 'value_template' 
+        #      {% set trans={'key1':'value1','key2':'value2'} %}
+        #      {{ trans[value_json.field] | default(value_json.field) }}
+        #  - for 'command_template'
+        #      {% set trans={'value1':'key1','value2':'key2'} %}
+        #      {{ trans[value] | default(value) }}
+        #
+        value_template  = jinja_set_dict('trans',trans)
+        value_template += "{{ trans[value_json."+field+"] | default(value_json."+field+") }}"
+        command_template  = jinja_set_dict_rev('trans',trans)
+        command_template += "{{ trans[value] | default(value) }} "
+        return {
+            "options": list(map( lambda x: trans.get(x,x) , choices )) ,
+            "value_template": value_template,
+            "command_template": command_template
+        }
+    else: # No translation needed. 
+        return {
+            "options": choices,
+            "value_template": "{{ value_json.{} }}".format(field),
+        }
+                
+def homeassistant_discovery_device(lesyd, device, mqtt_client):
 
     unique_id = lesyd.name + "_" + device.mac 
-
+    
     discovery = {
         'device': {
             "identifiers": [ unique_id ] ,
@@ -241,7 +354,7 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
         'origin': {
             "name":"LeSyd",
             "sw": LESYD_VERSION ,
-            "url": "https://github.com/"
+            "url": "https://github.com/schauveau/lesyd"
         },
         'availability' : [
             { 
@@ -261,75 +374,66 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
     # "entity_category": "config",
             
     components = {
-        ##### Obsolete entities must be provided with their platform
-        ##### to clean them from the HA database
+        ##### DO NOT REMOVE: Obsolete entities are provided with their platform.
+        ##### The purpose is to clear obsolete entities
         "dc_input_power": {
             "platform": "sensor",
-            "obsolete": True
+        },
+        "ac_charging_booking": {
+            "platform": "number",
         },
         ##### Sensor #####
         "state_of_charge": {
             "platform": "sensor",
-            "name": "State of Charge",
             "device_class": "battery",   
             "unit_of_measurement": "%",
         },
         "ac_output_power": {
             "platform": "sensor",
-            "name": "AC Output Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "dc_output_power": {
             "platform": "sensor",
-            "name": "DC Output Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "dc_charging_power": {
             "platform": "sensor",
-            "name": "DC Charging Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "usb_output_power": {
             "platform": "sensor",
-            "name": "USB Output Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "ac_input_power": {
             "platform": "sensor",
-            "name": "AC Input Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "ac_charging_power": {
             "platform": "sensor",
-            "name": "AC Charging Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "charging_power": {
             "platform": "sensor",
-            "name": "Charging Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "total_input_power": {
             "platform": "sensor",
-            "name": "Total Input Power",
             "device_class": "power",
             "unit_of_measurement": "W"
         },
         "ac_charging_rate": {
             "platform": "sensor",
-            "name": "AC Charging Rate",
             "entity_category": "diagnostic", 
         },
         "ac_charging_level": {
             "platform": "sensor",
-            "name": "AC Charging Level",
             "device_class": "power",
             "unit_of_measurement": "W",
             "entity_category": "diagnostic", 
@@ -337,21 +441,22 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
         ##### Select #####
         "led":{
             "platform": "select",
-            "name": "Led",
-            "options": device.LED_CHOICES,
+            ** homeassistant_select_discovery(lesyd, 'led', device.LED_CHOICES),
+        },
+        "ac_mode":{
+            "platform": "select",
+            ** homeassistant_select_discovery(lesyd, 'ac_mode', device.AC_MODE_CHOICES),
         },
         ##### Number #####
-        "ac_charging_booking": {
+        "ac_booking_charging": {
             "platform": "number",
-            "name": "AC Charging Booking",
             "unit_of_measurement": "min",
             "min"  : 0,
-            "max"  : device.MAX_AC_CHARGING_BOOKING,
+            "max"  : device.MAX_AC_BOOKING_CHARGING,
             "step" : 1
         },
         "dc_max_charging_current": {
             "platform": "number",
-            "name": "DC Max Charging Current",
             "unit_of_measurement": "A",
             "min"  : 1,
             "max"  : device.DC_MAX_CHARGING_CURRENT,
@@ -360,7 +465,6 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
         },
         "discharge_lower_limit": {
             "platform": "number",
-            "name": "Discharge Lower Limit",
             "unit_of_measurement": "%",
             "min"  : device.MIN_DISCHARGE_LOWER_LIMIT/10.0,
             "max"  : device.MAX_DISCHARGE_LOWER_LIMIT/10.0,
@@ -369,7 +473,6 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
         },
         "ac_charging_upper_limit": {
             "platform": "number",
-            "name": "AC Charging Upper Limit",
             "unit_of_measurement": "%",
             "min"  : device.MIN_AC_CHARGING_UPPER_LIMIT/10.0,
             "max"  : device.MAX_AC_CHARGING_UPPER_LIMIT/10.0,
@@ -380,32 +483,27 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
         ##### Switch #####
         'ac_output': {
             "platform": "switch",
-            "name": "AC Output",
             "payload_on": True,
             "payload_off": False,
         },        
         'usb_output': {
             "platform": "switch",
-            "name": "USB Output",
             "payload_on": True,
             "payload_off": False,
         },        
         'dc_output': {
             "platform": "switch",
-            "name": "DC Output",
             "payload_on": True,
             "payload_off": False,
         },
         'ac_silent_charging': {
             "platform": "switch",
-            "name": "AC Silent Charging",
             "icon": "mdi:fan",
             "payload_on": True,
             "payload_off": False,
         },
         'key_sound': {
             "platform": "switch",
-            "name": "Key Sound",
             "payload_on": True,
             "payload_off": False,
             "entity_category": "config",
@@ -422,26 +520,37 @@ def homeassistant_discovery(lesyd, device, mqtt_client):
             entry['unique_id'] = unique_id + "_"+key  
             entry["object_id"] = device.name + "_"+key  
 
+            if key in lesyd.translate:
+                entry["name"] = lesyd.translate[key]
+            else:
+                entry["name"] = identifier_to_text(key)
+            
             if "value_template" not in entry:
                 entry["value_template"] = "{{ value_json."+key+" }}"
 
             if "command_topic" not in entry:
                 if platform in ["switch","number","select"] :
                     entry["command_topic"] = device.topic_state + "/set/" + key
+                    
             discovery['components'][key] = entry 
             
         else:
-            # Clear obsolete entries by publishing an empty component specification.
-            # The platform field is still mandatory.
-            discovery['components'][key] = { 'platform': entry['platform'] }             
-            continue
-
-    topic = lesyd.ha_prefix+'/device/lesyd/{}/config'.format(device.mac.lower())
+            # Make sure that obsolete entities are removed by HA by publishing an 
+            # entry continaing only 'platform'.
+            discovery['components'][key] = { 'platform': entry['platform'] } 
+            
+    topic = lesyd.ha_prefix+'/device/{}/{}/config'.format(lesyd.name, device.mac.lower())
     
     device.logger.info("Publish HA discovery on %s",topic)
-    
+
     payload = json.dumps(discovery, sort_keys=True)
     mqtt_client.publish(topic, payload, retain=True)
+    
+class Request():
+    pass
+
+class WriteRequest(Request):
+    pass
     
 class Device():
 
@@ -451,30 +560,31 @@ class Device():
     FUNC_READ_INPUT_REGISTERS=4
     FUNC_WRITE_HOLDING_REGISTER=6
 
-    LED_CHOICES=['Off', "On", "SOS", "Flash"]
+    LED_CHOICES=['off', "on", "sos", "flash"]
+    AC_MODE_CHOICES=['manual', "standby", "low", "high"]  # and 'auto'
 
-    # Up to 24 hours of MAX_AC_CHARGING_BOOKING
-    MAX_AC_CHARGING_BOOKING=24*60-1   
+    # Up to 24 hours of MAX_AC_BOOKING_CHARGING
+    MAX_AC_BOOKING_CHARGING=24*60-1   
 
     MIN_DISCHARGE_LOWER_LIMIT=0
     MAX_DISCHARGE_LOWER_LIMIT=500      # 50.0% 
     
     MIN_AC_CHARGING_UPPER_LIMIT=600    # 60% 
     MAX_AC_CHARGING_UPPER_LIMIT=1000   # 100% 
-        
+
     def __init__(self, lesyd, mac, config):
 
         self.lesyd = lesyd
-        self.mac  = mac    # The mac address (12 lowercase hexa characters)
+        self.mac  = mac  # The mac address (12 lowercase hexa characters)
 
+        self.mode = "Manual"
+        
         device_options = config['devices'][self.mac].copy()
 
         self.name = device_options.get('name') or mac   # A user friendly name (unique) 
         
         self.logger = logging.getLogger("lesyd.dev."+self.name)
 
-        print("======", self.logger, self.logger.level, self.logger.parent, self.logger.propagate, self.logger.getEffectiveLevel())
-        
         if self.name in ['bridge']:
             self.logger.error("Device name '%s' is reserved.", self.name)            
             sys.exit(1)
@@ -519,6 +629,7 @@ class Device():
         # so the request payloads to mqtt_sydpower are consumed from a queue.
         # A request is simply described by its payload.
         self.request_queue = queue.Queue()
+
         # The payload of the last request for which we are currenly awaiting a response.
         self.current_request = None 
         # and when that request was published.
@@ -526,34 +637,42 @@ class Device():
         # The timeout after which we stop waiting for the request.
         self.request_timeout = 0.3
 
-        # All possible fields. Some may be excluded from the published state        
-        self.all_fields = [
-            'ac_charging_booking',
+        # All fields that are by default enabled in the published state.
+        # The option 'exclude' can remove some of them
+        # Other options can also add fields to the state
+        self.default_fields = [
+            'ac_booking_charging',
+            'ac_charging_level',
+            'ac_charging_power',
+            'ac_charging_rate',
+            'ac_charging_upper_limit',
+            'ac_input_power',
             'ac_output',
             'ac_output_power',
             'ac_silent_charging',
-            'ac_input_power',
-            'ac_charging_power',
-            'dc_charging_power',
             'charging_power',
-            'total_input_power',
+            'dc_charging_power',
+            'dc_max_charging_current',
             'dc_output',
+            'dc_output_power',
+            'discharge_lower_limit',
+            'key_sound',
             'led' ,
             'state_of_charge',
+            'total_input_power',
             'usb_output' ,
-            'dc_max_charging_current',
-            'key_sound',
-            'ac_charging_rate',
-            'ac_charging_upper_limit',
-            'discharge_lower_limit',
-            'ac_charging_level',
             'usb_output_power',
-            'dc_output_power',            
         ]
 
         self.state_last_time = 0   # Time of the last state publication   
         self.state_last = None     # Last published state   
-        self.state = { k: None for k in self.all_fields }
+
+        # self.state contains the fields that we are going to publish
+        self.state  = { k: None for k in self.default_fields }
+
+        # self.shadow contains all the possible state fields including
+        # those that we are not going to publish.
+        self.shadow = { k: None for k in self.default_fields }
         
         # Merge default options into the device options
 
@@ -568,7 +687,9 @@ class Device():
             'input_refresh': DEFAULT_INPUT_REFRESH,
             'holding_refresh': DEFAULT_HOLDING_REFRESH,
             'guess_ac_input_power': False,
-            'exclude' : []
+            'exclude' : [],
+            'ac_manager': False,
+            'ac_silent_level': 500  # TODO
         }
             
         # Apply 'preset' if specified
@@ -593,6 +714,8 @@ class Device():
         self.holding_refresh = options['holding_refresh']
         self.loglevel        = options['loglevel']
         self.guess_ac_input_power = options['guess_ac_input_power']
+        self.ac_manager      = options['ac_manager']
+        self.ac_silent_level = options['ac_silent_level']
 
         self.ac_charging_levels = options['ac_charging_levels']
         if self.ac_charging_levels is None:
@@ -607,11 +730,16 @@ class Device():
         self.options = options 
         self.logger.info("%s ==> %s", self.mac, options)
 
+        self.shadow['ac_mode'] = 'manual'  
+        if self.ac_manager:
+            self.state['ac_mode'] = self.shadow['ac_mode']  
+            
         exclude = options.get('exclude',[]) or [] 
         for field in exclude:
             if field in self.state.keys():
                 del self.state[field]     
-
+    
+                
     # Set the current status to either 'online' or 'offline'
     def set_status(self, value): 
         if value != self.status:
@@ -658,6 +786,7 @@ class Device():
 
         if main.mqtt_sydpower.is_connected() :
 
+            
             ### The device can only process one request at a time so
             ### send them one by one
 
@@ -695,7 +824,10 @@ class Device():
                     main.mqtt_sydpower.publish(self.topic_request, payload)        
                     self.current_request      = payload
                     self.current_request_time = time.time()                               
-                
+
+            self.maintain_ac_mode()
+
+                    
     def update_state(self, field, value):
 
         # convert 'ac_charging_rate' to 'ac_charging_level' if we have the values.
@@ -703,7 +835,8 @@ class Device():
             # if the array is too small, use the latest value.
             level = self.ac_charging_levels[ min(value-1,len(self.ac_charging_levels)-1) ]
             self.update_state('ac_charging_level',level)            
-        
+
+        self.shadow[field] = value
         if field in self.state:
             self.state[field] = value
                 
@@ -764,8 +897,8 @@ class Device():
                 self.update_state( 'dc_output',  bool(data[HREG_DC_OUTPUT]) ) 
                 self.update_state( 'usb_output', bool(data[HREG_USB_OUTPUT]) ) 
                 self.update_state( 'dc_max_charging_current', data[HREG_DC_MAX_CHARGING_CURRENT] ) 
-                self.update_state( 'ac_charging_booking', data[HREG_AC_CHARGING_BOOKING] )
-                self.update_state( 'key_sound', bool(data[HREG_AC_CHARGING_BOOKING]) )
+                self.update_state( 'ac_booking_charging', data[HREG_AC_BOOKING_CHARGING] )
+                self.update_state( 'key_sound', bool(data[HREG_KEY_SOUND]) )
                 self.update_state( 'ac_charging_rate', data[HREG_AC_CHARGING_RATE] )
 
                 self.update_state( 'discharge_lower_limit',   data[HREG_DISCHARGE_LOWER_LIMIT]/10.0 )
@@ -803,7 +936,7 @@ class Device():
                     self.update_state( 'ac_input_power', max(0,data[IREG_TOTAL_INPUT_POWER] - data[IREG_DC_CHARGING_POWER] ) )
                 
                 self.update_state( 'ac_output_power', data[IREG_AC_OUTPUT_POWER] ) 
-                self.update_state( 'ac_charging_booking', data[IREG_AC_CHARGING_BOOKING] ) 
+                self.update_state( 'ac_booking_charging', data[IREG_AC_BOOKING_CHARGING] ) 
                 self.update_state( 'ac_charging_rate', data[IREG_AC_CHARGING_RATE] )
                 self.update_state( 'usb_output_power',
                                    (
@@ -877,13 +1010,13 @@ class Device():
                         ok = True
                         self.update_state( 'ac_charging_upper_limit', value/10.0)
 
-                elif hreg==HREG_AC_CHARGING_BOOKING:
-                    if 0 <= value and value <= self.MAX_AC_CHARGING_BOOKING:
+                elif hreg==HREG_AC_BOOKING_CHARGING:
+                    if 0 <= value and value <= self.MAX_AC_BOOKING_CHARGING:
                         ok = True
-                        self.update_state( 'ac_charging_booking', value )
+                        self.update_state( 'ac_booking_charging', value )
 
                 elif hreg==HREG_DC_MAX_CHARGING_CURRENT:
-                    if not (0 <= value and value <= self.MAX_AC_CHARGING_BOOKING):
+                    if not (0 <= value and value <= self.MAX_AC_BOOKING_CHARGING):
                         ok = True
                         self.update_state( 'dc_max_charging_current', value )
 
@@ -925,7 +1058,23 @@ class Device():
         value = msg.payload.decode()
         if self.status == value:
             self.status_confirmed = True            
-        
+
+    def request_ac_silent_charging(self, value:bool):
+        if type(value) != bool:
+            raise TypeError
+        request = self.encode_WriteHoldingRegister(HREG_AC_SILENT_CHARGING, int(value))
+        self.request_queue.put(request)
+
+    def request_ac_booking_charging(self, value:int):
+        if type(value) != int:
+            raise TypeError
+        if value<0 or value>self.MAX_AC_BOOKING_CHARGING:
+            raise ValueError
+                
+        request = self.encode_WriteHoldingRegister(HREG_AC_BOOKING_CHARGING, value)
+        self.request_queue.put(request)
+
+    
     def process_command(self, msg):
 
         if msg.topic.startswith(self.topic_state) : 
@@ -946,9 +1095,9 @@ class Device():
                     request = self.encode_WriteHoldingRegister(HREG_USB_OUTPUT, value)
                     self.request_queue.put(request)  
                 elif command=='/set/ac_silent_charging':
-                    value   = int(self.payload_to_bool(msg.payload))
-                    request = self.encode_WriteHoldingRegister(HREG_AC_SILENT_CHARGING, value)
-                    self.request_queue.put(request)  
+                    if self.shadow['ac_mode'] == 'manual':
+                        value   = self.payload_to_bool(msg.payload)
+                        self.request_ac_silent_charging(value)
                 elif command=='/set/key_sound':
                     value   = int(self.payload_to_bool(msg.payload))
                     request = self.encode_WriteHoldingRegister(HREG_KEY_SOUND, value)
@@ -963,10 +1112,10 @@ class Device():
                     if type(value) == int:
                         request = self.encode_WriteHoldingRegister(HREG_LED, value)
                         self.request_queue.put(request)                    
-                elif command=='/set/ac_charging_booking':
-                    value   = int(self.payload_to_int(msg.payload,0,self.MAX_AC_CHARGING_BOOKING))
-                    request = self.encode_WriteHoldingRegister(HREG_AC_CHARGING_BOOKING, value)
-                    self.request_queue.put(request)  
+                elif command=='/set/ac_booking_charging':
+                    if self.shadow['ac_mode'] == 'manual':
+                        value   = self.payload_to_int(msg.payload,0,self.MAX_AC_BOOKING_CHARGING)
+                        self.request_ac_booking_charging(value)
                 elif command=='/set/dc_max_charging_current':
                     value   = int(self.payload_to_int(msg.payload,1,self.DC_MAX_CHARGING_CURRENT))
                     request = self.encode_WriteHoldingRegister(HREG_DC_MAX_CHARGING_CURRENT, value)
@@ -982,14 +1131,103 @@ class Device():
                                                         self.MIN_AC_CHARGING_UPPER_LIMIT/10.0,
                                                         self.MAX_AC_CHARGING_UPPER_LIMIT/10.0)*10.0)
                     request = self.encode_WriteHoldingRegister(HREG_AC_CHARGING_UPPER_LIMIT, value)
-                    self.request_queue.put(request)  
+                    self.request_queue.put(request)
+                elif command=='/set/ac_mode':
+                    arg = msg.payload.decode().lower()
+                    if arg in self.AC_MODE_CHOICES:
+                        if self.shadow['ac_mode'] != arg:
+                            self.update_state('ac_mode',arg)
+                            self.maintain_ac_mode() 
                 else:
                     self.logger.error("Unknown command %s",command) 
             except ValueError:
                 pass
+
+    #        
+    # low, high, high_is_silent = ac_charging_low_high()
+    #
+    # Figure out the low and high AC charging powers and which one corresponds to 'silent charging'
+    #
+    def ac_charging_low_high(self):
+        # Figure out 
+        p1 = self.shadow['ac_charging_level']
+        p2 = self.ac_silent_level
+        if p1 <= p2:
+            return p1 , p2 , True
+        else:
+            return p2 , p1 , False 
+
+    # Request high or low charging level by setting AC silent charging
+    def request_high_charging_level(self, high: bool):
+        low_power, high_power, high_is_silent = self.ac_charging_low_high()
+
+        want_silent = (high == high_is_silent)
         
-                
-    
+        if self.shadow['ac_silent_charging'] != want_silent :
+            self.request_ac_silent_charging(want_silent)
+            return True
+
+        return False
+
+    # Must be called at regular interval to maintain the AC charging mode.
+    #
+    # The idea is that this function shall not perform more than one request.
+    #
+    # Other requests required to reach the desired mode will be sent during the
+    # next calls.
+    #
+    # The request shall be ordered to avoid intermediate states that would
+    # consume more than requested by the mode and also to be as reactive as
+    # possible 
+    # 
+    def maintain_ac_mode(self):
+        
+        if not main.mqtt_sydpower.is_connected():
+            return
+        
+        # We are not in a hurry. Wait until all outgoing messages are processed 
+        if self.current_request or not self.request_queue.empty():
+            return
+
+        # We are still in the startup phase.
+        if None in self.state.values():
+            return
+
+        ac_mode = self.shadow['ac_mode'] 
+        if ac_mode == 'manual':
+            pass
+
+        elif ac_mode == 'standby':
+
+            # Maintain AC Booking to a positive value
+            if self.shadow['ac_booking_charging'] < 5:
+                self.request_ac_booking_charging(60)
+                return
+
+            # Maintain low charging level while booking
+            if self.request_high_charging_level(False):
+                return
+            
+        elif ac_mode == 'low':
+
+            if self.request_high_charging_level(False):
+                return
+
+            # Disable AC booking
+            if self.shadow['ac_booking_charging'] > 0:
+                self.request_ac_booking_charging(0)
+                return  
+
+        elif ac_mode == 'high':
+
+            # Disable AC booking
+            if self.shadow['ac_booking_charging'] > 0:
+                self.request_ac_booking_charging(0)
+                return
+
+            if self.request_high_charging_level(True):
+                return
+                                       
     # Compute a CRC for a modbus message    
     def compute_crc(self, buf, size:int):
         crc = 0xFFFF
@@ -1035,7 +1273,7 @@ class Device():
         if len(buf) != 4+arg_size+payload_size :
             raise Exception('[modbus] malformed message')
 
-    def encode_ReadHoldingRegisters(self, start:int, count:int) -> bytearray :
+    def encode_ReadHoldingRegisters(self, start:int, count:int) -> bytearray:
         msg = bytearray()
         msg.append(self.MODBUS_CHANNEL)
         msg.append(self.FUNC_READ_HOLDING_REGISTERS)
@@ -1044,7 +1282,7 @@ class Device():
         self.append_crc(msg)
         return msg
 
-    def encode_ReadInputRegisters(self, start:int, count:int) -> bytearray :
+    def encode_ReadInputRegisters(self, start:int, count:int) -> bytearray:
         msg = bytearray()
         msg.append(self.MODBUS_CHANNEL)
         msg.append(self.FUNC_READ_INPUT_REGISTERS)
@@ -1053,7 +1291,7 @@ class Device():
         self.append_crc(msg)
         return msg
     
-    def encode_WriteHoldingRegister(self, index:int, value:int) -> bytearray :
+    def encode_WriteHoldingRegister(self, index:int, value:int) -> bytearray:
         msg = bytearray()
         msg.append(self.MODBUS_CHANNEL)
         msg.append(self.FUNC_WRITE_HOLDING_REGISTER)
@@ -1208,8 +1446,17 @@ class LeSyd :
         self.ha_prefix    = global_config['ha_prefix']
         self.loglevel     = global_config['loglevel']
         self.name         = global_config['lesyd_name']
-        
-                                     
+
+        self.translate = {
+            # Default translation for 'led' values
+            'on': 'On',
+            'off': 'Off',
+            'sos': 'SOS',
+            'flash': 'Flash',
+            # 
+        }
+        self.translate.update(config.get('translate') or {} )  
+                      
         ### 'devices' section of configuration file
         
         self.devices = [] 
@@ -1324,7 +1571,7 @@ class LeSyd :
         client.on_subscribe    = self._on_subscribe_cb
 
         if 'will' in config :
-            client.will_set( self.will_topic, payload='disconnected', qos=0, retain=True)
+            client.will_set( self.will_topic, payload='offline', qos=0, retain=True)
         
         client.connect_async(config['hostname'],
                              config['port'],
@@ -1412,12 +1659,9 @@ class LeSyd :
         sid = client.subscribe(topic, qos=0)
         self.message_handlers[topic] = handler 
         return sid
-          
+
     def on_message(self, client, userdata, msg):
-        #print("# "+msg.topic+" "+ msg.payload.hex())
-
-        handler = self.message_handlers.get(msg.topic)
-
+        handler = self.message_handlers.get(msg.topic)        
         if handler: 
             handler(msg)
         else:
@@ -1446,23 +1690,27 @@ class LeSyd :
 
             self.mqtt_client.publish(self.will_topic, 'online', retain=True)
 
+            #if self.ha_discovery:
+            #    homeassistant_discovery_bridge(self, self.mqtt_client)
+    
             for dev in self.devices:
                 for command in [ '/set/ac_output' ,
                                  '/set/usb_output',
                                  '/set/dc_output',
                                  '/set/key_sound',
                                  '/set/ac_silent_charging',
-                                 '/set/ac_charging_booking',
+                                 '/set/ac_booking_charging',
                                  '/set/dc_max_charging_current',
                                  '/set/led',                      
                                  '/set/key_sound',                      
                                  '/set/discharge_lower_limit', 
-                                 '/set/ac_charging_upper_limit', 
+                                 '/set/ac_charging_upper_limit',
+                                 '/set/ac_mode', 
                                 ] :
                     self.subscribe( self.mqtt_client, dev.topic_state+command , dev.process_command )                
 
                 if self.ha_discovery:
-                    homeassistant_discovery(self, dev, self.mqtt_client)
+                    homeassistant_discovery_device(self, dev, self.mqtt_client)
 
                 self.subscribe( self.mqtt_client, dev.topic_status , dev.process_status_msg )                
 

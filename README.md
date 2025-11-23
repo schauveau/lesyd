@@ -107,11 +107,31 @@ Note: 'pattern' cannot be omited here because this is a not a true anonymous con
    - yaml 6.0.2
    - yamale 6.0.0
    
-The package versions are only indicative of what I am currently using. LeSyd probably works fine with older versions.
+The package versions are only indicative of what I am currently using. LeSyd probably works fine with slightly older versions.
 
 All Python packages can be installed using `pip3`, `pipx` or from system packages on most Linux distributions.
 
 - Debian: `apt install python3-paho-mqtt python3-yaml python3-yamale`
+
+It the system packages are missing or not compatible then a solution can be to install then in a local virtual environment using `venv`.
+
+For example, assuming that LeSyd is installed in `/opt/lesyd`, do
+ 
+```
+python3 -m venv /opt/lesyd/venv
+. /opt/lesys/venv/bin/activate
+pip install paho-mqtt==2.1.0
+pip install yamale
+```
+
+and then start LeSyd with a shell script like this one:
+
+```
+#!/bin/sh
+. /opt/lesyd/venv/bin/activate
+/opt/lesyd/lesyd/lesyd.py "$@" 
+
+```
 
 ## Using LeSyd
 

@@ -210,4 +210,7 @@ The dictionary value is a structure containing the following fields:
 
 - `extension2 BOOLEAN`
   - Same as `extension1` but for the 2nd extension battery
+
+- `ac_manager BOOLEAN`
+  - if `true` then enable `ac_mode` (see MQTT.md for more details)
   

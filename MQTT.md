@@ -32,7 +32,7 @@ Contain the device state in JSON format.
   - A number of minutes during which AC charging will be disabled.
   - Valid range is 0 to 1440 (24h)
   - The value will automatically decrease by 1 every minute until it reaches 0.
-  - Writable at `lesyd/DEVICE/set/ac_charging_booking`
+  - Writable at `lesyd/DEVICE/set/ac_charging_booking` when `ac_mode` is manual or not set.  
   
 - `ac_charging_level`
   - A user-defined conversion of `ac_charging_rate` to a value in Watts.
@@ -57,6 +57,20 @@ Contain the device state in JSON format.
   - That field is not provided by default.
   - See the option `guess_ac_input_power` in the configuration file.
   
+- `ac_mode`
+  - That field is only present when `ac_manager` is set to `true` in the configuration file.
+  - It provide a simplified way to choose the level of AC Charging.  
+  - Writable at `lesyd/DEVICE/set/ac_mode`
+  - The possible values are
+    - `manual`: The user can manually set `ac_charging_booking` and `ac_silent_charging`.
+    - `standby`: Disable AC Charging by insuring that `ac_charging_charging` remains non-zero.
+    - `low` or `high`: Enable or disable `ac_silent_charging` to select the lowest or the highest possible charging power.
+  - Examples for a F2400 that charges at 500W with AC silent charging: 
+     - If the charging wheel is set to 300W then 'low' means 300W and 'high' means 500W.
+     - If the charging wheel is set to 500W then both 'low' and 'high' mean 500W.
+     - If the charging wheel is set to 700W then 'low' means 500W and 'high' means 700W.
+  - Remark: there is currently no known way to disconnect AC output from AC input. 
+
 - `ac_output_power`
   - The amount of power in Watts consumed by all AC Output ports.
 
@@ -70,7 +84,7 @@ Contain the device state in JSON format.
   - Can be `true` or `false`.
   - When `true` the device is supposed to limit its charge to remain silent.    
   - In practice, the charge becomes limited to 500W (on the F2400).   
-  - Writable at `lesyd/DEVICE/set/ac_silent_charging`
+  - Writable at `lesyd/DEVICE/set/ac_silent_charging` when `ac_mode` is manual or not set.
 
 - `charging_power`
   - Provide the total amount of power in Watts used to charge the battery.
@@ -120,7 +134,6 @@ Contain the device state in JSON format.
   - The state of the USB output switch. 
   - Can be `true` or `false`.
   - Writable at `lesyd/DEVICE/set/usb_output`
-
 
 
 

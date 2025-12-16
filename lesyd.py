@@ -1083,13 +1083,18 @@ class Device():
             self.logger.debug("Processing command %s", command)
             try:            
                 if command=='/set/ac_output':
-                    value   = int(self.payload_to_bool(msg.payload))
-                    request = self.encode_WriteHoldingRegister(HREG_AC_OUTPUT, value)
-                    self.request_queue.put(request)                
+                    # HREG_AC_OUTPUT may behaves as a toggle regardless of the written value.
+                    # so make sure that we only write when a toggle is requested.
+                    value = self.payload_to_bool(msg.payload)
+                    if value != self.shadow['ac_output'] :
+                      request = self.encode_WriteHoldingRegister(HREG_AC_OUTPUT, int(value))
+                      self.request_queue.put(request)
                 elif command=='/set/dc_output':
-                    value   = int(self.payload_to_bool(msg.payload))
-                    request = self.encode_WriteHoldingRegister(HREG_DC_OUTPUT, value)
-                    self.request_queue.put(request)  
+                    # HREG_DC_OUTPUT may have a strange behavior so only write when a toggle is requested.
+                    value = self.payload_to_bool(msg.payload)
+                    if value != self.shadow['dc_output'] :
+                      request = self.encode_WriteHoldingRegister(HREG_DC_OUTPUT, int(value))
+                      self.request_queue.put(request)
                 elif command=='/set/usb_output':
                     value   = int(self.payload_to_bool(msg.payload))
                     request = self.encode_WriteHoldingRegister(HREG_USB_OUTPUT, value)

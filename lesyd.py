@@ -517,8 +517,10 @@ def homeassistant_discovery_device(lesyd, device, mqtt_client):
 
         if key in device.state:
             
-            entry['unique_id'] = unique_id + "_"+key  
-            entry["object_id"] = device.name + "_"+key  
+            entry['unique_id'] = unique_id + "_"+key
+
+            #entry["object_id"] = device.name + "_"+key                     
+            entry["default_entity_id"] = platform + '.' + device.name + "_"+key
 
             if key in lesyd.translate:
                 entry["name"] = lesyd.translate[key]

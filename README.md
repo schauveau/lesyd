@@ -11,11 +11,11 @@ IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. Fo
 
 ## Changelog
 
-2025-04-21 : Added proper logging support.
-2025-04-20 : Added proper support for TLS connections (not tested)
-2025-04-20 : First version
-2025-12-15 : Fix incorrect behavior of set/ac_output and set/dc_output 
-2026-01-02 : Replace obsolete 'object_id' from HA MQTT discovery (issue 3)
+- 2025-04-21 : Added proper logging support.
+- 2025-04-20 : Added proper support for TLS connections (not tested)
+- 2025-04-20 : First version
+- 2025-12-15 : Fix incorrect behavior of set/ac_output and set/dc_output 
+- 2026-01-02 : Replace obsolete 'object_id' from HA MQTT discovery (issue 3)
 
 ## Known issues / TODO LIST
 

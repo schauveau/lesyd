@@ -1734,7 +1734,8 @@ class LeSyd :
                                  '/set/key_sound',                      
                                  '/set/discharge_lower_limit', 
                                  '/set/ac_charging_upper_limit',
-                                 '/set/ac_mode', 
+                                 '/set/ac_mode',
+                                 '/shutdown',                                 
                                 ] :
                     self.subscribe( self.mqtt_client, dev.topic_state+command , dev.process_command )                
 

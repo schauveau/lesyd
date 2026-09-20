@@ -23,6 +23,11 @@ Contains the availability status of a specific device.
 - The offline payload is `offline`
 - This message has the retain attribute but unlike `lesyd/bridge/status` this is not a `will` message so it may remain `online` after LeSyd becomes disconnected.   
 
+## lesyd/DEVICE/shutdown
+
+Perform a remote shutdown of the device.
+- No payload is required.
+- The command has no effect while the device is connected to the AC grid.
 
 ## lesyd/DEVICE/state
 

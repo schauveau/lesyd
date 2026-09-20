@@ -16,6 +16,8 @@ IMPORTANT: The connection to the Sydpower mqtt server is not yet implemented. Fo
 - 2025-04-20 : First version
 - 2025-12-15 : Fix incorrect behavior of set/ac_output and set/dc_output 
 - 2026-01-02 : Replace obsolete 'object_id' from HA MQTT discovery (issue 3)
+- 2026-09-20 : Added support for remote shutdown
+
 
 ## Known issues / TODO LIST
 
@@ -226,7 +228,7 @@ See ![MQTT.md](./MQTT.md) for a more detailed description of each value.
  
 - `usb_output` (RW)
 
-
+- `shutdow` 
 
 ## Home Assistant with MQTT auto-discovery
 

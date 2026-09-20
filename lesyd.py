@@ -224,8 +224,10 @@ HREG_LED        = 27
 HREG_KEY_SOUND  = 56
 HREG_AC_SILENT_CHARGING = 57
 HREG_AC_BOOKING_CHARGING = 63
+HREG_APP_CONTROL_SLEEP = 64
 HREG_DISCHARGE_LOWER_LIMIT = 66
 HREG_AC_CHARGING_UPPER_LIMIT = 67
+
 
 def homeassistant_discovery_bridge(lesyd, mqtt_client):
 
@@ -1100,8 +1102,11 @@ class Device():
             command = msg.topic[ len(self.topic_state) : ]
         
             self.logger.debug("Processing command %s", command)
-            try:            
-                if command=='/set/ac_output':
+            try:
+                if command=='/shutdown':
+                    request = self.encode_WriteHoldingRegister(HREG_APP_CONTROL_SLEEP, 1)
+                    self.request_queue.put(request)
+                elif command=='/set/ac_output':
                     # HREG_AC_OUTPUT may behaves as a toggle regardless of the written value.
                     # so make sure that we only write when a toggle is requested.
                     value = self.payload_to_bool(msg.payload)

@@ -509,8 +509,8 @@ def homeassistant_discovery_device(lesyd, device, mqtt_client):
             "entity_category": "config",
         },
         
-    }
-
+    }        
+    
     for key, entry in components.items():
         
         platform = entry['platform']        
@@ -540,7 +540,24 @@ def homeassistant_discovery_device(lesyd, device, mqtt_client):
             # Make sure that obsolete entities are removed by HA by publishing an 
             # entry continaing only 'platform'.
             discovery['components'][key] = { 'platform': entry['platform'] } 
-            
+
+    # And add buttons for actions without arguments
+    
+    for key in [ 'shutdown' ] :
+        if key in lesyd.translate:
+            name = lesyd.translate[key]
+        else:
+            name = identifier_to_text(key)            
+
+        discovery['components'][key] = {
+            "name":              name,
+            "platform":          "button",
+            "unique_id":         unique_id + "_" + key,            
+            "default_entity_id": 'button.' + device.name + "_" + key,
+            "command_topic":     device.topic_state + "/" + key,
+        }
+        
+                    
     topic = lesyd.ha_prefix+'/device/{}/{}/config'.format(lesyd.name, device.mac.lower())
     
     device.logger.info("Publish HA discovery on %s",topic)

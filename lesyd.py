@@ -686,6 +686,7 @@ class Device():
             'dc_output_power',
             'discharge_lower_limit',
             'key_sound',
+            'grid_ac_auto_output',
             'led' ,
             'state_of_charge',
             'total_input_power',

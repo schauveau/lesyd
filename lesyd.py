@@ -208,6 +208,7 @@ IREG_USB_OUTPUT_POWER_5 = 36
 IREG_USB_OUTPUT_POWER_6 = 37
 IREG_STATUS_BITS = 41
 IREG_STATE_OF_CHARGE_1 = 53
+IREG_USABLE_CAPACITY = 54   # TODO
 IREG_STATE_OF_CHARGE_2 = 55
 IREG_STATE_OF_CHARGE = 56
 IREG_AC_BOOKING_CHARGING = 57
@@ -227,6 +228,7 @@ HREG_AC_BOOKING_CHARGING = 63
 HREG_APP_CONTROL_SLEEP = 64
 HREG_DISCHARGE_LOWER_LIMIT = 66
 HREG_AC_CHARGING_UPPER_LIMIT = 67
+HREG_GRID_AC_AUTO_OUTPUT = 70
 
 
 def homeassistant_discovery_bridge(lesyd, mqtt_client):
@@ -505,6 +507,12 @@ def homeassistant_discovery_device(lesyd, device, mqtt_client):
             "payload_off": False,
         },
         'key_sound': {
+            "platform": "switch",
+            "payload_on": True,
+            "payload_off": False,
+            "entity_category": "config",
+        },
+        'grid_ac_auto_output': {
             "platform": "switch",
             "payload_on": True,
             "payload_off": False,
@@ -920,6 +928,7 @@ class Device():
                 self.update_state( 'dc_max_charging_current', data[HREG_DC_MAX_CHARGING_CURRENT] ) 
                 self.update_state( 'ac_booking_charging', data[HREG_AC_BOOKING_CHARGING] )
                 self.update_state( 'key_sound', bool(data[HREG_KEY_SOUND]) )
+                self.update_state( 'grid_ac_auto_output', bool(data[HREG_GRID_AC_AUTO_OUTPUT]) )
                 self.update_state( 'ac_charging_rate', data[HREG_AC_CHARGING_RATE] )
 
                 self.update_state( 'discharge_lower_limit',   data[HREG_DISCHARGE_LOWER_LIMIT]/10.0 )
@@ -1010,6 +1019,11 @@ class Device():
                     if value==0 or value==1:
                         ok = True
                         self.update_state( 'key_sound', bool(value))
+
+                elif hreg==HREG_GRID_AC_AUTO_OUTPUT:
+                    if value==0 or value==1:
+                        ok = True
+                        self.update_state( 'grid_ac_auto_output', bool(value))
 
                 elif hreg==HREG_DC_OUTPUT:
                     if value==0 or value==1:
@@ -1130,6 +1144,10 @@ class Device():
                 elif command=='/set/key_sound':
                     value   = int(self.payload_to_bool(msg.payload))
                     request = self.encode_WriteHoldingRegister(HREG_KEY_SOUND, value)
+                    self.request_queue.put(request)  
+                elif command=='/set/grid_ac_auto_output':
+                    value   = int(self.payload_to_bool(msg.payload))
+                    request = self.encode_WriteHoldingRegister(HREG_GRID_AC_AUTO_OUTPUT, value)
                     self.request_queue.put(request)  
                 elif command=='/set/led':                    
                     value = None
@@ -1731,7 +1749,7 @@ class LeSyd :
                                  '/set/ac_booking_charging',
                                  '/set/dc_max_charging_current',
                                  '/set/led',                      
-                                 '/set/key_sound',                      
+                                 '/set/grid_ac_auto_output',                      
                                  '/set/discharge_lower_limit', 
                                  '/set/ac_charging_upper_limit',
                                  '/set/ac_mode',
